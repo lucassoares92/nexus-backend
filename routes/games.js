@@ -230,12 +230,8 @@ router.get("/genres", async (req, res) => {
     const cached = cache.get("genres");
     if (cached) return res.json(cached);
 
-    const query = `
-      fields id, name, slug, games_count, url;
-      limit 15;
-    `;
-
-    const genres = await igdbQuery("genres", query);
+    // IGDB genres só tem id e name — slug/games_count não existem
+    const genres = await igdbQuery("genres", "fields id, name; limit 15;");
 
     // Para cada gênero, busca um jogo com capa para usar como imagem
     const enriched = await Promise.all(
@@ -246,16 +242,18 @@ router.get("/genres", async (req, res) => {
             `fields cover.image_id; where genres = (${g.id}) & cover != null & aggregated_rating > 80; sort aggregated_rating desc; limit 1;`
           );
           return {
-            ...g,
+            id: g.id,
+            name: g.name,
+            games_count: null,
             image: games[0]?.cover ? coverUrl(games[0].cover.image_id, "screenshot_big") : null,
           };
         } catch {
-          return { ...g, image: null };
+          return { id: g.id, name: g.name, games_count: null, image: null };
         }
       })
     );
 
-    cache.set("genres", enriched, 3600); // cache 1h para gêneros
+    cache.set("genres", enriched, 3600);
     res.json(enriched);
   } catch (err) {
     console.error("[/api/games/genres]", err.message);
